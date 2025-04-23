@@ -1,0 +1,2538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Task Tracker Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- Custom CSS Variables --- */
+        :root {
+            --primary: #4f46e5; /* Indigo */
+            --secondary: #10b981; /* Emerald */
+            --danger: #ef4444; /* Red */
+            --warning: #f59e0b; /* Amber */
+            --info: #3b82f6; /* Blue */
+        }
+
+        /* --- Base Styles --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Cool Gray 50 */
+            color: #1e293b; /* Slate 800 */
+        }
+
+        /* --- Header Styles --- */
+        .kanban-header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); /* Gradient */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* --- Kanban Column Styles --- */
+        .kanban-column {
+            min-height: 600px; /* Ensure columns have height for dropping */
+            background-color: white;
+            border-radius: 0.75rem; /* Rounded Large */
+            padding: 1.25rem; /* p-5 */
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            border-top: 4px solid; /* Colored top border */
+        }
+
+        .kanban-column:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Column specific border colors */
+        .kanban-column.todo { border-color: var(--danger); }
+        .kanban-column.inprogress { border-color: var(--warning); }
+        .kanban-column.done { border-color: var(--secondary); }
+
+        .kanban-column h2 {
+            @apply text-xl font-semibold mb-4 text-center pb-3 border-b border-gray-200;
+        }
+
+        /* Style for when dragging over a column */
+        .kanban-column.drag-over {
+            background-color: #f1f5f9; /* Slate 100 */
+            transform: scale(1.02);
+        }
+
+        /* --- Task Card Styles --- */
+        .task {
+            background-color: white;
+            border-radius: 0.5rem; /* Rounded Medium */
+            padding: 1rem; /* p-4 */
+            margin-bottom: 1rem; /* mb-4 */
+            cursor: grab;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: all 0.2s ease;
+            position: relative;
+            border-left: 4px solid transparent; /* Left border for status */
+        }
+
+        .task:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Task specific border colors */
+        .task.todo { border-left-color: var(--danger); }
+        .task.inprogress { border-left-color: var(--warning); }
+        .task.done { border-left-color: var(--secondary); }
+
+        .task:active {
+            cursor: grabbing;
+            transform: scale(1.03);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Style for the task being dragged */
+        .task.dragging {
+            opacity: 0.8;
+            transform: rotate(2deg);
+        }
+
+        /* Hide tasks filtered out by search */
+        .task.hidden-by-search { display: none; }
+
+        /* Task Header Layout */
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem; /* mb-3 */
+        }
+
+        .task-text-content {
+            flex-grow: 1;
+            margin-right: 0.5rem; /* mr-2 */
+        }
+
+        /* Task Text (Editable) */
+        .task-text {
+            font-weight: 500; /* Medium */
+            cursor: text;
+            padding: 0.25rem 0.5rem; /* py-1 px-2 */
+            border-radius: 0.25rem; /* Rounded Small */
+            min-height: 1.5em; /* Ensure it has some height */
+            display: inline-block;
+            width: calc(100% - 50px); /* Adjust width to leave space for progress */
+            vertical-align: top;
+            color: #1e293b; /* Slate 800 */
+            transition: all 0.2s ease;
+        }
+
+        .task-text:focus {
+            outline: none;
+            background-color: #e0e7ff; /* Indigo 100 */
+            box-shadow: 0 0 0 2px var(--primary); /* Focus ring */
+        }
+
+        /* Subtask Progress Indicator */
+        .subtask-progress {
+            font-size: 0.75rem; /* text-xs */
+            color: #64748b; /* Slate 500 */
+            margin-left: 0.5rem; /* ml-2 */
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: top;
+        }
+
+        /* Delete Task Button */
+        .delete-task-btn {
+            position: absolute;
+            top: 0.5rem; /* top-2 */
+            right: 0.5rem; /* right-2 */
+            background: none;
+            border: none;
+            color: #94a3b8; /* Slate 400 */
+            font-size: 1rem; /* text-base */
+            font-weight: bold;
+            cursor: pointer;
+            padding: 0.2rem;
+            line-height: 1;
+            border-radius: 50%;
+            width: 1.5rem; /* w-6 */
+            height: 1.5rem; /* h-6 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .delete-task-btn:hover {
+            color: var(--danger);
+            background-color: #fee2e2; /* Red 100 */
+        }
+
+        /* Due Date Section */
+        .due-date-section {
+            margin-top: 0.75rem; /* mt-3 */
+            font-size: 0.8rem; /* Slightly smaller than text-sm */
+            color: #475569; /* Slate 600 */
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* gap-2 */
+        }
+
+        .due-date-label {
+            font-weight: 500; /* Medium */
+            font-size: 0.75rem; /* text-xs */
+            color: #64748b; /* Slate 500 */
+        }
+
+        .due-date-input {
+            border: 1px solid #e2e8f0; /* Slate 200 */
+            border-radius: 0.375rem; /* Rounded */
+            padding: 0.25rem 0.5rem; /* py-1 px-2 */
+            font-size: 0.8rem;
+            outline: none;
+            cursor: pointer;
+            color: #1e293b; /* Slate 800 */
+            color-scheme: light; /* Ensure consistent date picker appearance */
+            transition: all 0.2s ease;
+        }
+
+        .due-date-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        /* Subtasks Section */
+        .subtasks-section {
+            margin-top: 1rem; /* mt-4 */
+            padding-top: 0.75rem; /* pt-3 */
+            border-top: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        .subtask-list {
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 0.75rem; /* mb-3 */
+            font-size: 0.875rem; /* text-sm */
+            color: #475569; /* Slate 600 */
+        }
+
+        .subtask-item {
+            margin-bottom: 0.5rem; /* mb-2 */
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* gap-2 */
+            padding: 0.25rem; /* p-1 */
+            border-radius: 0.25rem; /* Rounded Small */
+            transition: all 0.2s ease;
+        }
+
+        .subtask-item:hover {
+            background-color: #f8fafc; /* Cool Gray 50 */
+        }
+
+        .subtask-checkbox {
+            cursor: pointer;
+            flex-shrink: 0;
+            border-radius: 0.25rem; /* Rounded Small */
+            border-color: #cbd5e1; /* Slate 300 */
+            color: var(--primary);
+            accent-color: var(--primary); /* Modern way to color checkboxes */
+            transition: all 0.2s ease;
+        }
+
+        .subtask-checkbox:checked {
+            background-color: var(--primary);
+        }
+
+        .subtask-text {
+            flex-grow: 1;
+            transition: all 0.2s ease;
+            color: #475569; /* Slate 600 */
+        }
+
+        .subtask-text.completed {
+            color: #94a3b8; /* Slate 400 */
+            text-decoration: line-through;
+        }
+
+        .delete-subtask-btn {
+            background: none;
+            border: none;
+            color: #cbd5e1; /* Slate 300 */
+            font-size: 0.8rem;
+            cursor: pointer;
+            padding: 0 0.2rem;
+            margin-left: auto;
+            line-height: 1;
+            border-radius: 4px;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+
+        .delete-subtask-btn:hover {
+            color: var(--danger);
+            background-color: #fee2e2; /* Red 100 */
+        }
+
+        /* Add Subtask Form */
+        .add-subtask-form {
+            display: flex;
+            gap: 0.5rem; /* gap-2 */
+            margin-top: 0.75rem; /* mt-3 */
+        }
+
+        .add-subtask-input {
+            flex-grow: 1;
+            border: 1px solid #e2e8f0; /* Slate 200 */
+            border-radius: 0.375rem; /* Rounded */
+            padding: 0.5rem; /* p-2 */
+            font-size: 0.875rem; /* text-sm */
+            outline: none;
+            color: #1e293b; /* Slate 800 */
+            transition: all 0.2s ease;
+        }
+
+        .add-subtask-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        .add-subtask-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.375rem; /* Rounded */
+            padding: 0.5rem 1rem; /* py-2 px-4 */
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 500; /* Medium */
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem; /* gap-1 */
+        }
+
+        .add-subtask-btn:hover {
+            background-color: #4338ca; /* Indigo 700 */
+        }
+
+        /* Confetti Canvas */
+        .confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Search Bar */
+        .search-container {
+            margin-bottom: 1.5rem; /* mb-6 */
+            max-width: 48rem; /* max-w-3xl */
+            margin-left: auto;
+            margin-right: auto;
+            padding: 0 1rem; /* px-4 */
+            position: relative;
+        }
+
+        #searchInput {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem; /* py-3 pl-10 pr-4 */
+            border: 1px solid #e2e8f0; /* Slate 200 */
+            border-radius: 0.5rem; /* Rounded Medium */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            font-size: 1rem; /* text-base */
+            color: #1e293b; /* Slate 800 */
+            transition: all 0.3s ease;
+        }
+
+        #searchInput:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); /* Focus ring */
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1.25rem; /* Adjusted for px-4 on container */
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8; /* Slate 400 */
+        }
+
+        /* Add Task Section */
+        .add-task-container {
+            margin-bottom: 2rem; /* mb-8 */
+            max-width: 48rem; /* max-w-3xl */
+            margin-left: auto;
+            margin-right: auto;
+            background-color: white;
+            padding: 1.5rem; /* p-6 */
+            border-radius: 0.75rem; /* Rounded Large */
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            border: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        .add-task-container h2 {
+            text-align: center;
+            margin-bottom: 1rem; /* mb-4 */
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 600; /* Semibold */
+            color: #1e293b; /* Slate 800 */
+        }
+
+        /* Form Input (Shared) */
+        .form-input {
+            flex-grow: 1;
+            border: 1px solid #e2e8f0; /* Slate 200 */
+            border-radius: 0.5rem; /* Rounded Medium */
+            padding: 0.75rem 1rem; /* py-3 px-4 */
+            font-size: 1rem; /* text-base */
+            color: #1e293b; /* Slate 800 */
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); /* Focus ring */
+        }
+
+        /* Form Button (Shared) */
+        .form-button {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 500; /* Medium */
+            padding: 0.75rem 1.5rem; /* py-3 px-6 */
+            border-radius: 0.5rem; /* Rounded Medium */
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* gap-2 */
+        }
+
+        .form-button:hover {
+            background-color: #4338ca; /* Indigo 700 */
+        }
+
+        .form-button.secondary {
+            background-color: white;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        .form-button.secondary:hover {
+            background-color: #eef2ff; /* Indigo 50 */
+        }
+
+        /* Priority Indicator */
+        .priority-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle; /* Align with text */
+        }
+
+        .priority-high { background-color: #ef4444; } /* Red 500 */
+        .priority-medium { background-color: #f59e0b; } /* Amber 500 */
+        .priority-low { background-color: #10b981; } /* Emerald 500 */
+        .priority-none { background-color: #94a3b8; } /* Slate 400 */
+
+        /* Task Actions (e.g., View Details) */
+        .task-actions {
+            position: absolute;
+            top: 0.5rem; /* top-2 */
+            right: 2.5rem; /* right-10 (to make space for delete btn) */
+            display: flex;
+            gap: 0.25rem; /* gap-1 */
+        }
+
+        .task-action-btn {
+            background: none;
+            border: none;
+            color: #94a3b8; /* Slate 400 */
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 0.2rem;
+            line-height: 1;
+            border-radius: 50%;
+            width: 1.5rem; /* w-6 */
+            height: 1.5rem; /* h-6 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .task-action-btn:hover {
+            color: var(--primary);
+            background-color: #e0e7ff; /* Indigo 100 */
+        }
+
+        /* --- Data Table Styles --- */
+        .data-table-container {
+            @apply w-full mx-auto mt-12 bg-white rounded-lg shadow-lg p-6 overflow-x-auto border border-gray-200;
+        }
+
+        .data-table {
+            @apply w-full text-left text-sm text-gray-700 border-collapse;
+        }
+
+        .data-table thead {
+            @apply text-xs text-gray-700 uppercase bg-gray-50;
+        }
+
+        .data-table th, .data-table td {
+            @apply px-6 py-3 border-b border-gray-200;
+        }
+
+        .data-table th {
+            @apply font-semibold text-left;
+        }
+
+        .data-table tbody tr:hover {
+            @apply bg-gray-50;
+        }
+
+        /* Status indicators for Table/Modal */
+        .status-todo {
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800;
+        }
+
+        .status-inprogress {
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+        }
+
+        .status-done {
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+        }
+
+        .status-completed { /* For subtasks */
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800;
+        }
+
+        .status-not-completed { /* For subtasks */
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800;
+        }
+
+        .status-na { /* For N/A in table */
+            @apply text-gray-400 italic text-xs;
+        }
+
+        /* --- Stats Cards --- */
+        .stats-card {
+            @apply bg-white rounded-lg shadow p-4 border border-gray-200;
+        }
+
+        .stats-card h3 {
+            @apply text-sm font-medium text-gray-500 mb-2;
+        }
+
+        .stats-card .value {
+            @apply text-2xl font-semibold text-gray-900;
+        }
+
+        .stats-grid {
+            @apply grid grid-cols-1 md:grid-cols-3 gap-6 mb-8;
+        }
+
+        /* Priority Selector Dropdown */
+        .priority-selector {
+            @apply appearance-none bg-white border border-gray-300 rounded-md pl-3 pr-8 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500;
+            /* Custom arrow using SVG */
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+        }
+
+        /* --- Dropdown Menu (for Table Actions) --- */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
+            z-index: 1;
+            border-radius: 0.5rem; /* Rounded Medium */
+            overflow: hidden;
+            border: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        .dropdown-content a {
+            color: #1e293b; /* Slate 800 */
+            padding: 0.75rem 1rem; /* py-3 px-4 */
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* gap-2 */
+            font-size: 0.875rem; /* text-sm */
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-content a:hover {
+            background-color: #f8fafc; /* Cool Gray 50 */
+            color: var(--primary);
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem; /* gap-1 */
+            color: #64748b; /* Slate 500 */
+            font-size: 0.875rem; /* text-sm */
+            padding: 0.5rem; /* p-2 */
+            border-radius: 0.25rem; /* Rounded Small */
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-btn:hover {
+            background-color: #f1f5f9; /* Slate 100 */
+            color: #1e293b; /* Slate 800 */
+        }
+
+        /* --- Modal Styles --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Dim background */
+            overflow-y: auto; /* Enable scroll if content overflows */
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto; /* Centered vertically and horizontally */
+            padding: 2rem; /* p-8 */
+            border-radius: 0.75rem; /* Rounded Large */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            max-width: 32rem; /* max-w-md */
+            width: 90%; /* Responsive width */
+            animation: modalFadeIn 0.3s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .close-modal {
+            color: #94a3b8; /* Slate 400 */
+            float: right;
+            font-size: 1.5rem; /* text-2xl */
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1; /* Prevent extra space */
+        }
+
+        .close-modal:hover {
+            color: #1e293b; /* Slate 800 */
+        }
+
+        .modal-header {
+            margin-bottom: 1.5rem; /* mb-6 */
+            padding-bottom: 1rem; /* pb-4 */
+            border-bottom: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        .modal-title {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 600; /* Semibold */
+            color: #1e293b; /* Slate 800 */
+            margin: 0;
+        }
+
+        .modal-body {
+            margin-bottom: 1.5rem; /* mb-6 */
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem; /* gap-3 */
+            padding-top: 1rem; /* pt-4 */
+            border-top: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        /* Task Detail Modal Specific Styles */
+        .task-detail-row {
+            margin-bottom: 1rem; /* mb-4 */
+        }
+
+        .task-detail-label {
+            font-weight: 500; /* Medium */
+            color: #64748b; /* Slate 500 */
+            margin-bottom: 0.25rem; /* mb-1 */
+            display: block;
+            font-size: 0.875rem; /* text-sm */
+        }
+
+        .task-detail-value {
+            font-size: 0.95rem; /* Slightly larger than sm */
+            color: #1e293b; /* Slate 800 */
+        }
+
+        .task-detail-value.text { /* For task name */
+            padding: 0.75rem; /* p-3 */
+            background-color: #f8fafc; /* Cool Gray 50 */
+            border-radius: 0.375rem; /* Rounded */
+            border: 1px solid #e2e8f0; /* Slate 200 */
+        }
+
+        .task-detail-value.subtasks {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-detail-value.subtasks li {
+            padding: 0.5rem 0; /* py-2 */
+            border-bottom: 1px solid #e2e8f0; /* Slate 200 */
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* gap-2 */
+        }
+
+        .task-detail-value.subtasks li:last-child {
+            border-bottom: none;
+        }
+
+        /* Progress Bar (in stats and modal) */
+        .progress-bar-container {
+            width: 100%;
+            height: 0.5rem; /* h-2 */
+            background-color: #e2e8f0; /* Slate 200 */
+            border-radius: 0.25rem; /* Rounded Small */
+            overflow: hidden;
+            margin-top: 0.5rem; /* mt-2 */
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary);
+            border-radius: 0.25rem; /* Rounded Small */
+            transition: width 0.3s ease;
+        }
+
+        /* Empty State (for table) */
+        .empty-state {
+            text-align: center;
+            padding: 2rem; /* p-8 */
+            color: #64748b; /* Slate 500 */
+        }
+
+        .empty-state-icon {
+            font-size: 3rem; /* text-5xl */
+            color: #cbd5e1; /* Slate 300 */
+            margin-bottom: 1rem; /* mb-4 */
+        }
+
+        .empty-state-text {
+            font-size: 1rem; /* text-base */
+            margin-bottom: 1rem; /* mb-4 */
+        }
+
+        .empty-state-btn {
+            margin-top: 1rem; /* mt-4 */
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .kanban-column {
+                min-height: auto; /* Allow columns to shrink on mobile */
+                margin-bottom: 1.5rem; /* mb-6 */
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr; /* Stack stats cards */
+            }
+
+            /* Stack add task input/button on smaller screens if needed */
+            .add-task-container .flex {
+                flex-direction: column; /* Stack input and button */
+            }
+             .add-task-container .priority-selector {
+                 margin-top: 0.5rem; /* Add space when stacked */
+                 margin-bottom: 0.5rem;
+             }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="kanban-header text-white py-6 mb-8">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold">Kanban Task Tracker Pro</h1>
+                    <p class="text-indigo-200 mt-1">Organize your workflow efficiently</p>
+                </div>
+                <div class="flex items-center gap-2 sm:gap-4">
+                    <button id="exportBtn" class="form-button secondary text-xs sm:text-sm px-3 sm:px-6 py-2 sm:py-3">
+                        <i class="fas fa-file-export"></i> <span class="hidden sm:inline">Export</span>
+                    </button>
+                    <button id="importBtn" class="form-button secondary text-xs sm:text-sm px-3 sm:px-6 py-2 sm:py-3">
+                        <i class="fas fa-file-import"></i> <span class="hidden sm:inline">Import</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 pb-12">
+        <div class="search-container relative">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="searchInput" placeholder="Search tasks or subtasks..." class="w-full">
+        </div>
+
+        <div class="stats-grid">
+            <div class="stats-card">
+                <h3>Total Tasks</h3>
+                <div class="value" id="totalTasks">0</div>
+            </div>
+            <div class="stats-card">
+                <h3>Tasks Completed</h3>
+                <div class="value" id="completedTasks">0</div>
+            </div>
+            <div class="stats-card">
+                <h3>Subtasks Completed</h3>
+                <div class="value" id="completedSubtasks">0/0</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="subtaskProgressBar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="add-task-container">
+            <h2>Create New Task</h2>
+            <div class="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <input type="text" id="newTaskInput" placeholder="What needs to be done?" class="form-input flex-grow">
+                <select id="prioritySelect" class="priority-selector">
+                    <option value="none">Priority</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <button id="addTaskBtn" class="form-button justify-center sm:justify-start">
+                    <i class="fas fa-plus"></i> Add Task
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <div id="todo" class="kanban-column todo">
+                <h2 class="text-red-600"><i class="fas fa-list-ul mr-2"></i>To Do</h2>
+                <div class="task-list space-y-3">
+                    </div>
+            </div>
+            <div id="inprogress" class="kanban-column inprogress">
+                <h2 class="text-yellow-600"><i class="fas fa-spinner mr-2"></i>In Progress</h2>
+                <div class="task-list space-y-3">
+                    </div>
+            </div>
+            <div id="done" class="kanban-column done">
+                <h2 class="text-green-600"><i class="fas fa-check-circle mr-2"></i>Done</h2>
+                <div class="task-list space-y-3">
+                    </div>
+            </div>
+        </div>
+
+        <div class="data-table-container">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Task Analytics</h3>
+                <div class="dropdown">
+                    <button class="dropdown-btn">
+                        <i class="fas fa-ellipsis-v"></i> Actions
+                    </button>
+                    <div class="dropdown-content">
+                        <a href="#" id="clearAllBtn"><i class="fas fa-trash-alt w-4 text-center"></i> Clear All Tasks</a>
+                        <a href="#" id="exportTableBtn"><i class="fas fa-file-csv w-4 text-center"></i> Export as CSV</a>
+                    </div>
+                </div>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Task Name</th>
+                        <th>Priority</th>
+                        <th>SubTask Name</th>
+                        <th>Subtask Status</th>
+                        <th>Task Status</th>
+                        <th>Due Date</th>
+                        <th>Last Modified</th>
+                    </tr>
+                </thead>
+                <tbody id="taskDataTableBody">
+                    </tbody>
+            </table>
+            <div id="emptyTableState" class="empty-state hidden">
+                <div class="empty-state-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <p class="empty-state-text">No tasks found. Add your first task to get started!</p>
+                <button id="addFirstTaskBtn" class="form-button empty-state-btn">
+                    <i class="fas fa-plus"></i> Add Task
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="taskDetailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-modal">&times;</span>
+                <h3 class="modal-title">Task Details</h3>
+            </div>
+            <div class="modal-body">
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Task Name</span>
+                    <div class="task-detail-value text" id="modalTaskName"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Status</span>
+                    <div class="task-detail-value" id="modalTaskStatus"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Priority</span>
+                    <div class="task-detail-value" id="modalTaskPriority"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Due Date</span>
+                    <div class="task-detail-value" id="modalTaskDueDate"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Created</span>
+                    <div class="task-detail-value" id="modalTaskCreated"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Last Modified</span>
+                    <div class="task-detail-value" id="modalTaskModified"></div>
+                </div>
+                <div class="task-detail-row">
+                    <span class="task-detail-label">Subtasks</span>
+                    <div class="task-detail-value">
+                        <div class="subtask-progress mb-2 text-sm" id="modalSubtaskProgress"></div>
+                        <ul class="task-detail-value subtasks" id="modalSubtaskList"></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="closeModalBtn" class="form-button secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-modal">&times;</span>
+                <h3 class="modal-title">Import Tasks</h3>
+            </div>
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="importFile" class="block text-sm font-medium text-gray-700 mb-2">Select JSON file to import:</label>
+                    <input type="file" id="importFile" accept=".json" class="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-indigo-50 file:text-indigo-700
+                      hover:file:bg-indigo-100 cursor-pointer">
+                </div>
+                <div class="p-4 bg-yellow-50 rounded-md text-yellow-700 text-sm">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Warning: Importing will replace all current tasks. Export your current tasks first if you want to keep them.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelImportBtn" class="form-button secondary">Cancel</button>
+                <button id="confirmImportBtn" class="form-button">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
+
+    <script>
+        // --- DOM Elements ---
+        // Select all major interactive elements from the HTML
+        const columns = document.querySelectorAll('.kanban-column');
+        const taskLists = document.querySelectorAll('.task-list');
+        const todoList = document.querySelector('#todo .task-list');
+        const inProgressList = document.querySelector('#inprogress .task-list');
+        const doneList = document.querySelector('#done .task-list');
+        const newTaskInput = document.getElementById('newTaskInput');
+        const prioritySelect = document.getElementById('prioritySelect');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const searchInput = document.getElementById('searchInput');
+        const taskDataTableBody = document.getElementById('taskDataTableBody');
+        const emptyTableState = document.getElementById('emptyTableState');
+        const addFirstTaskBtn = document.getElementById('addFirstTaskBtn');
+        const totalTasksEl = document.getElementById('totalTasks');
+        const completedTasksEl = document.getElementById('completedTasks');
+        const completedSubtasksEl = document.getElementById('completedSubtasks');
+        const subtaskProgressBar = document.getElementById('subtaskProgressBar');
+        const exportBtn = document.getElementById('exportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const exportTableBtn = document.getElementById('exportTableBtn');
+
+        // --- Modal Elements ---
+        // Select elements related to the task detail modal
+        const taskDetailModal = document.getElementById('taskDetailModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const closeModalElements = document.querySelectorAll('.close-modal'); // Includes 'x' buttons
+        const modalTaskName = document.getElementById('modalTaskName');
+        const modalTaskStatus = document.getElementById('modalTaskStatus');
+        const modalTaskPriority = document.getElementById('modalTaskPriority');
+        const modalTaskDueDate = document.getElementById('modalTaskDueDate');
+        const modalTaskCreated = document.getElementById('modalTaskCreated');
+        const modalTaskModified = document.getElementById('modalTaskModified');
+        const modalSubtaskProgress = document.getElementById('modalSubtaskProgress');
+        const modalSubtaskList = document.getElementById('modalSubtaskList');
+
+        // --- Import Modal Elements ---
+        // Select elements related to the import modal
+        const importModal = document.getElementById('importModal');
+        const importFileInput = document.getElementById('importFile');
+        const cancelImportBtn = document.getElementById('cancelImportBtn');
+        const confirmImportBtn = document.getElementById('confirmImportBtn');
+
+        // --- Confetti Setup ---
+        // Initialize the confetti effect library
+        const myConfetti = confetti.create(confettiCanvas, {
+            resize: true, // Adjust confetti on window resize
+            useWorker: true, // Use a web worker for performance
+            disableForReducedMotion: true // Respect user's accessibility settings
+        });
+
+        // --- State ---
+        // Application state variables
+        let draggedTask = null; // Holds the task element currently being dragged
+        let tasks = []; // Array to store all task objects
+        // Task structure: {id, text, column, priority, dueDate, createdAt, lastModified, subtasks: [{id, text, completed, lastModified}]}
+        let currentSearchQuery = ''; // Stores the current search input value
+        let selectedTaskForDetail = null; // Stores the task object being viewed in the modal
+
+        // --- Constants ---
+        // Define constants used throughout the script
+        const TASKS_STORAGE_KEY = 'kanbanTasksPro'; // Key for localStorage
+        const PRIORITY_COLORS = { // Tailwind classes for priority indicators
+            high: 'priority-high',
+            medium: 'priority-medium',
+            low: 'priority-low',
+            none: 'priority-none'
+        };
+        const PRIORITY_LABELS = { // User-friendly labels for priorities
+            high: 'High',
+            medium: 'Medium',
+            low: 'Low',
+            none: 'None'
+        };
+
+        // --- Helper Functions ---
+        // Utility functions used in various parts of the application
+
+        /**
+         * Gets the current timestamp in ISO format.
+         * @returns {string} ISO timestamp string.
+         */
+        function getCurrentTimestamp() {
+            return new Date().toISOString();
+        }
+
+        /**
+         * Formats an ISO timestamp into a readable string.
+         * @param {string | null} isoTimestamp - The ISO timestamp string.
+         * @returns {string} Formatted date and time string or 'N/A'.
+         */
+        function formatTimestamp(isoTimestamp) {
+            if (!isoTimestamp) return 'N/A';
+            try {
+                const date = new Date(isoTimestamp);
+                // Example: Apr 23, 2025, 8:01 AM
+                return date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } catch (e) {
+                console.error("Error formatting timestamp:", isoTimestamp, e);
+                return 'Invalid Date';
+            }
+        }
+
+        /**
+         * Formats an ISO date string (YYYY-MM-DD) into a readable string.
+         * @param {string | null} isoDate - The ISO date string.
+         * @returns {string} Formatted date string or 'Not set'.
+         */
+        function formatDate(isoDate) {
+            if (!isoDate) return 'Not set';
+            try {
+                // Date constructor handles YYYY-MM-DD correctly, but add time to avoid timezone issues
+                const date = new Date(isoDate + 'T00:00:00');
+                // Example: Apr 23, 2025
+                return date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    timeZone: 'UTC' // Specify UTC to avoid off-by-one day errors
+                });
+            } catch (e) {
+                console.error("Error formatting date:", isoDate, e);
+                return 'Invalid Date';
+            }
+        }
+
+
+        /**
+         * Gets the display name for a task status based on its column ID.
+         * @param {string} columnId - The ID of the column ('todo', 'inprogress', 'done').
+         * @returns {string} The display name ('To Do', 'In Progress', 'Done').
+         */
+        function getTaskStatusName(columnId) {
+            switch (columnId) {
+                case 'todo': return 'To Do';
+                case 'inprogress': return 'In Progress';
+                case 'done': return 'Done';
+                default: return 'Unknown';
+            }
+        }
+
+        /**
+         * Gets the CSS class for a task status indicator based on its column ID.
+         * @param {string} columnId - The ID of the column.
+         * @returns {string} The corresponding CSS class (e.g., 'status-todo').
+         */
+        function getTaskStatusClass(columnId) {
+            switch (columnId) {
+                case 'todo': return 'status-todo';
+                case 'inprogress': return 'status-inprogress';
+                case 'done': return 'status-done';
+                default: return '';
+            }
+        }
+
+        /**
+         * Calculates and formats the subtask progress string for a task.
+         * @param {Array} subtasks - The array of subtask objects for a task.
+         * @returns {string} A string describing subtask completion (e.g., "2/3 subtasks completed (67%)").
+         */
+        function calculateSubtaskProgress(subtasks) {
+            if (!subtasks || subtasks.length === 0) return "No subtasks";
+            const completedCount = subtasks.filter(sub => sub.completed).length;
+            const percentage = Math.round((completedCount / subtasks.length) * 100);
+            return `${completedCount}/${subtasks.length} subtasks completed (${percentage}%)`;
+        }
+
+        /**
+         * Filters the main tasks array based on the current search query.
+         * @returns {Array} An array of tasks that match the search query.
+         */
+        function getFilteredTasks() {
+            const query = currentSearchQuery.toLowerCase().trim();
+            if (!query) return tasks; // Return all tasks if search is empty
+            // Filter tasks where the task text or any subtask text includes the query
+            return tasks.filter(task =>
+                task.text.toLowerCase().includes(query) ||
+                (task.subtasks && task.subtasks.some(sub => sub.text.toLowerCase().includes(query)))
+            );
+        }
+
+        /**
+         * Updates the statistics display (total tasks, completed tasks, subtask progress).
+         */
+        function updateStats() {
+            const totalTasks = tasks.length;
+            const completedTasks = tasks.filter(task => task.column === 'done').length;
+            const allSubtasks = tasks.flatMap(task => task.subtasks || []);
+            const completedSubtasks = allSubtasks.filter(sub => sub.completed).length;
+            const totalSubtasks = allSubtasks.length;
+            const subtaskPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+            // Update DOM elements with calculated stats
+            totalTasksEl.textContent = totalTasks;
+            completedTasksEl.textContent = completedTasks;
+            completedSubtasksEl.textContent = `${completedSubtasks}/${totalSubtasks}`;
+            subtaskProgressBar.style.width = `${subtaskPercentage}%`;
+            subtaskProgressBar.setAttribute('aria-valuenow', subtaskPercentage); // Accessibility
+
+            // Show/hide the empty state message in the data table
+            if (totalTasks === 0) {
+                emptyTableState.classList.remove('hidden');
+                taskDataTableBody.parentElement.classList.add('hidden'); // Hide table itself
+            } else {
+                emptyTableState.classList.add('hidden');
+                 taskDataTableBody.parentElement.classList.remove('hidden'); // Show table
+            }
+        }
+
+        /**
+         * Gets the CSS class for the priority indicator dot.
+         * @param {string} priority - The priority level ('high', 'medium', 'low', 'none').
+         * @returns {string} The corresponding CSS class.
+         */
+        function getPriorityClass(priority) {
+            return PRIORITY_COLORS[priority] || PRIORITY_COLORS.none;
+        }
+
+        /**
+         * Gets the user-friendly label for a priority level.
+         * @param {string} priority - The priority level.
+         * @returns {string} The display label.
+         */
+        function getPriorityLabel(priority) {
+            return PRIORITY_LABELS[priority] || PRIORITY_LABELS.none;
+        }
+
+        // --- Rendering Functions ---
+        // Functions responsible for updating the UI based on the current state
+
+        /**
+         * Rerenders the entire Kanban board and the data table.
+         */
+        function renderBoardAndTable() {
+            renderTasks(); // Update the Kanban columns
+            renderDataTable(); // Update the analytics table
+            updateStats(); // Update the stats cards
+        }
+
+        /**
+         * Renders the task cards in the appropriate Kanban columns based on filtered tasks.
+         */
+        function renderTasks() {
+            const filteredTasks = getFilteredTasks();
+            // Clear existing tasks from all columns
+            taskLists.forEach(list => list.innerHTML = '');
+
+            // Handle case where search yields no results
+            if (filteredTasks.length === 0 && currentSearchQuery) {
+                columns.forEach(col => {
+                    const emptyState = document.createElement('div');
+                    emptyState.className = 'empty-state p-4 text-center text-gray-500';
+                    emptyState.innerHTML = `<i class="fas fa-search mb-2 text-2xl"></i><p>No tasks match "${currentSearchQuery}"</p>`;
+                    col.querySelector('.task-list').appendChild(emptyState);
+                });
+                return; // Stop rendering tasks
+            }
+
+            // Render each filtered task
+            filteredTasks.forEach(task => {
+                // Data migration/default values for older saved tasks
+                if (!task.subtasks) task.subtasks = [];
+                if (!task.priority) task.priority = 'none';
+                if (!task.createdAt) task.createdAt = task.lastModified || getCurrentTimestamp();
+                if (!task.lastModified) task.lastModified = task.createdAt;
+                if (task.dueDate === undefined) task.dueDate = null; // Ensure dueDate exists
+                task.subtasks.forEach(sub => {
+                    if (sub.completed === undefined) sub.completed = false;
+                    if (!sub.lastModified) sub.lastModified = task.lastModified;
+                });
+                // Ensure task column is valid, default to 'todo' if not
+                if (!['todo', 'inprogress', 'done'].includes(task.column)) {
+                    task.column = 'todo';
+                }
+
+                // Create the task element and add it to the correct column
+                const taskElement = createTaskElement(task);
+                const targetList = document.querySelector(`#${task.column} .task-list`);
+                if (targetList) {
+                    targetList.appendChild(taskElement);
+                } else {
+                    // Fallback to 'todo' if the target column doesn't exist for some reason
+                    console.warn(`Target list for column ${task.column} not found. Adding task ${task.id} to 'todo'.`);
+                    todoList.appendChild(taskElement);
+                    task.column = 'todo'; // Correct the task's column in the data
+                }
+            });
+
+            // Save tasks in case any data migration occurred
+            saveTasks();
+            // Re-attach all necessary event listeners to the newly rendered tasks
+            addDragListenersToTasks();
+            addEditListenersToTasks();
+            addSubtaskListeners();
+            addDueDateListeners();
+            addTaskActionListeners();
+        }
+
+        /**
+         * Renders the data analytics table based on the full tasks array.
+         */
+        function renderDataTable() {
+            if (!taskDataTableBody) return; // Exit if table body doesn't exist
+
+            taskDataTableBody.innerHTML = ''; // Clear previous table content
+
+            if (tasks.length === 0) {
+                // Handled by updateStats function now
+                return;
+            }
+
+            // Sort tasks for consistent table display (e.g., by creation date descending)
+            const sortedTasks = [...tasks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+
+            sortedTasks.forEach(task => {
+                const taskStatusName = getTaskStatusName(task.column);
+                const taskStatusClass = getTaskStatusClass(task.column);
+                const priorityClass = getPriorityClass(task.priority); // Get the indicator class
+                const priorityLabel = getPriorityLabel(task.priority);
+
+                // If task has subtasks, create a row for each subtask
+                if (task.subtasks && task.subtasks.length > 0) {
+                    task.subtasks.forEach((subtask, index) => {
+                        const row = taskDataTableBody.insertRow();
+                        row.className = 'hover:bg-gray-50 cursor-pointer';
+                        row.setAttribute('data-task-id', task.id); // Link row to task for modal click
+                        row.innerHTML = `
+                            <td class="${index > 0 ? 'pt-1 pb-3' : 'pt-3 pb-3'}">${index === 0 ? task.text : ''}</td>
+                            <td class="${index > 0 ? 'pt-1 pb-3' : 'pt-3 pb-3'}">${index === 0 ? `<span class="priority-indicator ${priorityClass}" title="Priority: ${priorityLabel}"></span>${priorityLabel}` : ''}</td>
+                            <td class="pt-1 pb-3">${subtask.text}</td>
+                            <td class="pt-1 pb-3"><span class="${subtask.completed ? 'status-completed' : 'status-not-completed'}">${subtask.completed ? 'Completed' : 'Not Completed'}</span></td>
+                            <td class="${index > 0 ? 'pt-1 pb-3' : 'pt-3 pb-3'}">${index === 0 ? `<span class="${taskStatusClass}">${taskStatusName}</span>` : ''}</td>
+                            <td class="${index > 0 ? 'pt-1 pb-3' : 'pt-3 pb-3'}">${index === 0 ? (task.dueDate ? formatDate(task.dueDate) : 'Not set') : ''}</td>
+                            <td class="pt-1 pb-3">${formatTimestamp(subtask.lastModified || task.lastModified)}</td>
+                        `;
+                        // Add border only between subtasks of the same parent task
+                        if (index > 0) {
+                             row.cells[0].classList.add('border-t', 'border-dashed', 'border-gray-100');
+                             row.cells[1].classList.add('border-t', 'border-dashed', 'border-gray-100');
+                             row.cells[4].classList.add('border-t', 'border-dashed', 'border-gray-100');
+                             row.cells[5].classList.add('border-t', 'border-dashed', 'border-gray-100');
+                        }
+                    });
+                } else {
+                    // If task has no subtasks, create a single row for the task
+                    const row = taskDataTableBody.insertRow();
+                    row.className = 'hover:bg-gray-50 cursor-pointer';
+                    row.setAttribute('data-task-id', task.id);
+                    row.innerHTML = `
+                        <td>${task.text}</td>
+                         <td><span class="priority-indicator ${priorityClass}" title="Priority: ${priorityLabel}"></span>${priorityLabel}</td>
+                        <td><span class="status-na">N/A</span></td>
+                        <td><span class="status-na">N/A</span></td>
+                        <td><span class="${taskStatusClass}">${taskStatusName}</span></td>
+                        <td>${task.dueDate ? formatDate(task.dueDate) : 'Not set'}</td>
+                        <td>${formatTimestamp(task.lastModified)}</td>
+                    `;
+                }
+            });
+
+            // Add click listeners to table rows to open the detail modal
+            document.querySelectorAll('#taskDataTableBody tr').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    // Prevent modal opening if clicking on interactive elements within the row (if any added later)
+                    if (e.target.closest('button, a, input')) return;
+                    const taskId = row.getAttribute('data-task-id');
+                    if(taskId) showTaskDetail(taskId);
+                });
+            });
+        }
+
+
+        /**
+         * Creates the HTML element for a single task card.
+         * @param {object} task - The task object.
+         * @returns {HTMLElement} The created task card div element.
+         */
+        function createTaskElement(task) {
+            const { id, text, subtasks, dueDate, priority, column } = task;
+
+            const taskDiv = document.createElement('div');
+            taskDiv.className = `task ${column}`; // Add column class for styling
+            taskDiv.setAttribute('draggable', 'true');
+            taskDiv.setAttribute('data-task-id', id);
+
+            // --- Task Header ---
+            const taskHeader = document.createElement('div');
+            taskHeader.className = 'task-header';
+
+            // Container for priority indicator, text, and subtask progress
+            const taskTextContent = document.createElement('div');
+            taskTextContent.className = 'task-text-content';
+
+            // Priority indicator (dot)
+            const priorityIndicator = document.createElement('span');
+            priorityIndicator.className = `priority-indicator ${getPriorityClass(priority)}`;
+            priorityIndicator.setAttribute('title', `Priority: ${getPriorityLabel(priority)}`);
+            taskTextContent.appendChild(priorityIndicator);
+
+            // Task text (editable span)
+            const taskTextSpan = document.createElement('span');
+            taskTextSpan.className = 'task-text';
+            taskTextSpan.textContent = text;
+            taskTextSpan.setAttribute('contenteditable', 'true');
+            taskTextSpan.setAttribute('data-task-id', id); // Link for editing
+            taskTextContent.appendChild(taskTextSpan);
+
+            // Subtask progress text (e.g., "2/3 completed")
+            const progressSpan = document.createElement('span');
+            progressSpan.className = 'subtask-progress';
+            progressSpan.textContent = calculateSubtaskProgress(subtasks);
+            progressSpan.setAttribute('data-progress-for', id); // Link for updates
+            taskTextContent.appendChild(progressSpan);
+
+            taskHeader.appendChild(taskTextContent);
+
+            // Action buttons container (View Details, Delete)
+            const taskActionsContainer = document.createElement('div');
+            taskActionsContainer.className = 'flex items-start flex-shrink-0'; // Use flex for buttons
+
+             // View Details Button
+            const viewDetailsBtn = document.createElement('button');
+            viewDetailsBtn.className = 'task-action-btn mr-1'; // Added margin
+            viewDetailsBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            viewDetailsBtn.setAttribute('aria-label', 'View task details');
+            viewDetailsBtn.setAttribute('data-task-id', id); // Link for modal
+            taskActionsContainer.appendChild(viewDetailsBtn);
+
+            // Delete Task Button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-task-btn static ml-1'; // Make static, adjust margin
+             deleteBtn.style.position = 'static'; // Override absolute positioning
+            deleteBtn.innerHTML = '&times;';
+            deleteBtn.setAttribute('aria-label', 'Delete task');
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation(); // Prevent triggering drag or other parent events
+                deleteTask(id);
+            };
+            taskActionsContainer.appendChild(deleteBtn);
+
+
+            taskHeader.appendChild(taskActionsContainer); // Add actions to header
+            taskDiv.appendChild(taskHeader); // Add header to task card
+
+            // --- Due Date Section ---
+            const dueDateSection = document.createElement('div');
+            dueDateSection.className = 'due-date-section';
+            dueDateSection.innerHTML = `
+                <label for="dueDate-${id}" class="due-date-label"><i class="far fa-calendar-alt mr-1"></i>Due:</label>
+                <input type="date" id="dueDate-${id}" class="due-date-input" data-task-id="${id}">
+            `;
+            const dateInput = dueDateSection.querySelector('.due-date-input');
+            // Format date for input type="date" (YYYY-MM-DD)
+            if (dueDate) {
+                 try {
+                    dateInput.value = new Date(dueDate).toISOString().split('T')[0];
+                 } catch (e) {
+                     console.error("Error setting due date input value:", dueDate, e);
+                     dateInput.value = ''; // Set to empty if date is invalid
+                 }
+            } else {
+                dateInput.value = '';
+            }
+
+            taskDiv.appendChild(dueDateSection);
+
+            // --- Subtasks Section ---
+            const subtasksSection = document.createElement('div');
+            subtasksSection.className = 'subtasks-section';
+
+            // Subtask List (UL)
+            const subtaskList = document.createElement('ul');
+            subtaskList.className = 'subtask-list';
+            subtaskList.setAttribute('data-task-parent-id', id); // Link for adding/updating
+
+            // Create and append each subtask element
+            if (subtasks) {
+                subtasks.forEach(subtask => {
+                    subtaskList.appendChild(createSubtaskElement(subtask, id));
+                });
+            }
+
+            subtasksSection.appendChild(subtaskList);
+
+            // Add Subtask Form
+            const addSubtaskForm = document.createElement('div');
+            addSubtaskForm.className = 'add-subtask-form';
+            // Prevent form click from triggering task drag
+            addSubtaskForm.onclick = (e) => e.stopPropagation();
+
+            const subtaskInput = document.createElement('input');
+            subtaskInput.type = 'text';
+            subtaskInput.placeholder = 'Add subtask...';
+            subtaskInput.className = 'add-subtask-input';
+            subtaskInput.setAttribute('aria-label', 'New subtask description');
+
+            const addSubtaskBtn = document.createElement('button');
+            addSubtaskBtn.innerHTML = '<i class="fas fa-plus text-xs"></i> Add'; // Smaller icon + text
+            addSubtaskBtn.className = 'add-subtask-btn';
+            addSubtaskBtn.setAttribute('data-task-id', id); // Link to parent task
+            addSubtaskBtn.type = 'button'; // Prevent form submission
+
+            addSubtaskForm.appendChild(subtaskInput);
+            addSubtaskForm.appendChild(addSubtaskBtn);
+            subtasksSection.appendChild(addSubtaskForm);
+
+            taskDiv.appendChild(subtasksSection);
+
+            return taskDiv;
+        }
+
+        /**
+         * Creates the HTML element for a single subtask item (within a task card).
+         * @param {object} subtask - The subtask object.
+         * @param {string} parentTaskId - The ID of the parent task.
+         * @returns {HTMLElement} The created subtask list item (li) element.
+         */
+        function createSubtaskElement(subtask, parentTaskId) {
+            const { id, text, completed } = subtask;
+
+            const li = document.createElement('li');
+            li.className = 'subtask-item';
+            li.setAttribute('data-subtask-id', id);
+            li.setAttribute('data-parent-task-id', parentTaskId); // Store parent ID for updates
+
+            // Checkbox for completion status
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'subtask-checkbox';
+            checkbox.checked = completed;
+            checkbox.setAttribute('data-subtask-id', id); // Link for toggling
+            checkbox.setAttribute('data-parent-task-id', parentTaskId);
+            li.appendChild(checkbox);
+
+            // Subtask text (with completed class if applicable)
+            const textSpan = document.createElement('span');
+            textSpan.className = 'subtask-text';
+            if (completed) textSpan.classList.add('completed');
+            textSpan.textContent = text;
+            li.appendChild(textSpan);
+
+            // Delete Subtask Button
+            const deleteSubtaskBtn = document.createElement('button');
+            deleteSubtaskBtn.className = 'delete-subtask-btn';
+            deleteSubtaskBtn.innerHTML = '&times;'; // 'x' symbol
+            deleteSubtaskBtn.setAttribute('aria-label', 'Delete subtask');
+            // Attach click handler directly - simpler than adding listeners later
+            deleteSubtaskBtn.onclick = (e) => {
+                e.stopPropagation(); // Prevent parent event handlers
+                deleteSubtask(parentTaskId, id);
+            };
+            li.appendChild(deleteSubtaskBtn);
+
+            return li;
+        }
+
+        /**
+         * Populates and displays the task detail modal.
+         * @param {string} taskId - The ID of the task to display.
+         */
+        function showTaskDetail(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) {
+                console.error(`Task with ID ${taskId} not found for detail view.`);
+                return;
+            }
+
+            selectedTaskForDetail = task; // Store the task for potential future actions
+
+            // Populate modal fields
+            modalTaskName.textContent = task.text;
+            modalTaskStatus.innerHTML = `<span class="${getTaskStatusClass(task.column)}">${getTaskStatusName(task.column)}</span>`;
+            modalTaskPriority.innerHTML = `<span class="priority-indicator ${getPriorityClass(task.priority)} mr-1"></span> ${getPriorityLabel(task.priority)}`;
+            modalTaskDueDate.textContent = task.dueDate ? formatDate(task.dueDate) : 'Not set';
+            modalTaskCreated.textContent = formatTimestamp(task.createdAt);
+            modalTaskModified.textContent = formatTimestamp(task.lastModified);
+
+            // Populate subtask progress and list
+            modalSubtaskProgress.textContent = calculateSubtaskProgress(task.subtasks);
+            modalSubtaskList.innerHTML = ''; // Clear previous subtasks
+            if (task.subtasks && task.subtasks.length > 0) {
+                task.subtasks.forEach(subtask => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <input type="checkbox" ${subtask.completed ? 'checked' : ''} disabled class="subtask-checkbox scale-90"> <span class="${subtask.completed ? 'subtask-text completed' : 'subtask-text'}">${subtask.text}</span>
+                        <span class="text-xs text-gray-500 ml-auto whitespace-nowrap">${formatTimestamp(subtask.lastModified)}</span>
+                    `;
+                    modalSubtaskList.appendChild(li);
+                });
+            } else {
+                // Display message if no subtasks
+                const li = document.createElement('li');
+                li.className = 'text-gray-500 italic text-sm';
+                li.textContent = 'No subtasks';
+                modalSubtaskList.appendChild(li);
+            }
+
+            // Display the modal
+            taskDetailModal.style.display = 'block';
+             document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+         /** Closes any currently open modal */
+        function closeModal() {
+            if (taskDetailModal.style.display === 'block') {
+                taskDetailModal.style.display = 'none';
+                selectedTaskForDetail = null; // Clear selected task
+            }
+             if (importModal.style.display === 'block') {
+                importModal.style.display = 'none';
+                importFileInput.value = ''; // Clear file input
+            }
+             document.body.style.overflow = ''; // Restore background scrolling
+        }
+
+        // --- Data Modification Functions (with timestamp updates) ---
+        // Functions that modify the 'tasks' array and persist changes
+
+        /**
+         * Adds a new task to the 'tasks' array and updates the UI.
+         */
+        function addTask() {
+            const taskText = newTaskInput.value.trim();
+            if (taskText === '') return; // Do nothing if input is empty
+
+            const timestamp = getCurrentTimestamp();
+            const newTaskId = `task-${Date.now()}`; // Simple unique ID
+            const priority = prioritySelect.value || 'none';
+
+            // Create the new task object
+            const newTask = {
+                id: newTaskId,
+                text: taskText,
+                column: 'todo', // New tasks always start in 'To Do'
+                priority: priority,
+                dueDate: null, // Default due date
+                createdAt: timestamp,
+                lastModified: timestamp,
+                subtasks: [] // Initialize with empty subtasks array
+            };
+
+            tasks.push(newTask); // Add to the main array
+            saveTasks(); // Persist changes to localStorage
+
+            // Add the task element to the board only if it matches the current search
+            if (matchesSearch(newTask)) {
+                const taskElement = createTaskElement(newTask);
+                todoList.appendChild(taskElement);
+                // Attach listeners to the new task element
+                addDragListenersToTask(taskElement);
+                addEditListenerToTask(taskElement);
+                addSubtaskListenersToTask(taskElement);
+                addDueDateListenerToTask(taskElement);
+                addTaskActionListenersToTask(taskElement);
+            }
+
+            // Reset input fields
+            newTaskInput.value = '';
+            prioritySelect.value = 'none';
+
+            // Update table and stats
+            renderDataTable();
+            updateStats();
+        }
+
+        /**
+         * Checks if a task matches the current search query.
+         * @param {object} task - The task object to check.
+         * @returns {boolean} True if the task matches, false otherwise.
+         */
+        function matchesSearch(task) {
+            const query = currentSearchQuery.toLowerCase().trim();
+            if (!query) return true; // Matches if search is empty
+            // Check task text and subtask texts
+            return task.text.toLowerCase().includes(query) ||
+                   (task.subtasks && task.subtasks.some(sub => sub.text.toLowerCase().includes(query)));
+        }
+
+
+        /**
+         * Updates the text of an existing task.
+         * @param {string} taskId - The ID of the task to update.
+         * @param {string} newText - The new text for the task.
+         */
+        function updateTaskText(taskId, newText) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex > -1) {
+                // Only update if text actually changed
+                if (tasks[taskIndex].text !== newText) {
+                    tasks[taskIndex].text = newText;
+                    tasks[taskIndex].lastModified = getCurrentTimestamp(); // Update timestamp
+                    saveTasks();
+                    renderDataTable(); // Update table row
+                    // No need to re-render the board card if only text changed
+                }
+            } else {
+                console.error(`Task with ID ${taskId} not found for text update.`);
+            }
+        }
+
+        /**
+         * Deletes a task and its subtasks from the state and UI.
+         * @param {string} taskId - The ID of the task to delete.
+         */
+        function deleteTask(taskId) {
+            // Confirmation dialog
+            if (!confirm('Are you sure you want to delete this task and all its subtasks? This action cannot be undone.')) {
+                return;
+            }
+
+            const initialLength = tasks.length;
+            tasks = tasks.filter(task => task.id !== taskId); // Filter out the task
+
+            // Check if a task was actually removed
+            if (tasks.length < initialLength) {
+                // Remove the task element from the DOM
+                const taskElement = document.querySelector(`.task[data-task-id="${taskId}"]`);
+                if (taskElement) taskElement.remove();
+
+                saveTasks(); // Persist the change
+                renderDataTable(); // Update the table
+                updateStats(); // Update stats
+            } else {
+                 console.warn(`Task with ID ${taskId} not found for deletion.`);
+            }
+        }
+
+        /**
+         * Adds a subtask to a parent task.
+         * @param {string} parentTaskId - The ID of the parent task.
+         * @param {string} subtaskText - The text for the new subtask.
+         */
+        function addSubtask(parentTaskId, subtaskText) {
+            if (!subtaskText) return; // Ignore empty subtask text
+
+            const parentTaskIndex = tasks.findIndex(task => task.id === parentTaskId);
+            if (parentTaskIndex === -1) {
+                 console.error(`Parent task with ID ${parentTaskId} not found for adding subtask.`);
+                 return;
+            }
+
+            const timestamp = getCurrentTimestamp();
+            const newSubtaskId = `subtask-${Date.now()}`; // Simple unique ID
+            const newSubtask = {
+                id: newSubtaskId,
+                text: subtaskText,
+                completed: false, // New subtasks are not completed
+                lastModified: timestamp // Timestamp for the subtask itself
+            };
+
+            // Add the subtask and update parent task's timestamp
+            tasks[parentTaskIndex].subtasks.push(newSubtask);
+            tasks[parentTaskIndex].lastModified = timestamp; // Update parent task modified time
+            saveTasks();
+
+            // Add the new subtask element to the DOM
+            const subtaskListElement = document.querySelector(`.subtask-list[data-task-parent-id="${parentTaskId}"]`);
+            if (subtaskListElement) {
+                const subtaskElement = createSubtaskElement(newSubtask, parentTaskId);
+                subtaskListElement.appendChild(subtaskElement);
+                addSubtaskItemListeners(subtaskElement); // Attach listeners to the new subtask
+            } else {
+                 console.warn(`Subtask list for parent task ${parentTaskId} not found in DOM.`);
+            }
+
+            // Update progress display, table, and stats
+            updateSubtaskProgress(parentTaskId);
+            renderDataTable();
+            updateStats();
+        }
+
+        /**
+         * Deletes a specific subtask from a parent task.
+         * @param {string} parentTaskId - The ID of the parent task.
+         * @param {string} subtaskId - The ID of the subtask to delete.
+         */
+        function deleteSubtask(parentTaskId, subtaskId) {
+            const parentTaskIndex = tasks.findIndex(task => task.id === parentTaskId);
+            if (parentTaskIndex === -1) {
+                 console.error(`Parent task with ID ${parentTaskId} not found for deleting subtask.`);
+                 return;
+            }
+
+            const initialSubtaskLength = tasks[parentTaskIndex].subtasks.length;
+            // Filter out the subtask to be deleted
+            tasks[parentTaskIndex].subtasks = tasks[parentTaskIndex].subtasks.filter(sub => sub.id !== subtaskId);
+
+            // Check if a subtask was actually removed
+            if (tasks[parentTaskIndex].subtasks.length < initialSubtaskLength) {
+                tasks[parentTaskIndex].lastModified = getCurrentTimestamp(); // Update parent timestamp
+                saveTasks();
+
+                // Remove the subtask element from the DOM
+                const subtaskElement = document.querySelector(`.subtask-item[data-subtask-id="${subtaskId}"]`);
+                if (subtaskElement) subtaskElement.remove();
+
+                // Update progress display, table, and stats
+                updateSubtaskProgress(parentTaskId);
+                renderDataTable();
+                updateStats();
+            } else {
+                 console.warn(`Subtask with ID ${subtaskId} not found in parent task ${parentTaskId}.`);
+            }
+        }
+
+        /**
+         * Toggles the completion status of a subtask.
+         * @param {string} parentTaskId - The ID of the parent task.
+         * @param {string} subtaskId - The ID of the subtask to toggle.
+         * @param {boolean} isCompleted - The new completion status (true/false).
+         */
+        function toggleSubtaskCompletion(parentTaskId, subtaskId, isCompleted) {
+            const parentTaskIndex = tasks.findIndex(task => task.id === parentTaskId);
+            if (parentTaskIndex === -1) return;
+
+            const subtaskIndex = tasks[parentTaskIndex].subtasks.findIndex(sub => sub.id === subtaskId);
+            if (subtaskIndex === -1) return;
+
+            // Only update if the status actually changed
+            if (tasks[parentTaskIndex].subtasks[subtaskIndex].completed !== isCompleted) {
+                const timestamp = getCurrentTimestamp();
+                tasks[parentTaskIndex].subtasks[subtaskIndex].completed = isCompleted;
+                tasks[parentTaskIndex].subtasks[subtaskIndex].lastModified = timestamp; // Update subtask timestamp
+                tasks[parentTaskIndex].lastModified = timestamp; // Update parent task timestamp
+                saveTasks();
+
+                // Update the visual appearance (strikethrough) in the DOM
+                const subtaskElement = document.querySelector(`.subtask-item[data-subtask-id="${subtaskId}"]`);
+                if (subtaskElement) {
+                    subtaskElement.querySelector('.subtask-text')?.classList.toggle('completed', isCompleted);
+                }
+
+                // Update progress display, table, and stats
+                updateSubtaskProgress(parentTaskId);
+                renderDataTable();
+                updateStats();
+
+                // --- Auto-move to Done (Optional Enhancement) ---
+                // If the subtask was marked complete and the parent task is not already 'Done'
+                if (isCompleted && tasks[parentTaskIndex].column !== 'done') {
+                    const allCompleted = tasks[parentTaskIndex].subtasks.every(sub => sub.completed);
+                    // Check if all subtasks are now complete (and there's at least one subtask)
+                    if (allCompleted && tasks[parentTaskIndex].subtasks.length > 0) {
+                        // Ask the user if they want to move the parent task
+                        if (confirm('All subtasks are now completed. Move this task to the "Done" column?')) {
+                            moveTaskToColumn(parentTaskId, 'done'); // Move the parent task
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Updates the due date of a task.
+         * @param {string} taskId - The ID of the task to update.
+         * @param {string | null} newDueDate - The new due date in YYYY-MM-DD format, or null/empty string.
+         */
+        function updateDueDate(taskId, newDueDate) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex > -1) {
+                // Use null if the date string is empty
+                const formattedDate = newDueDate || null;
+                // Only update if the date actually changed
+                if (tasks[taskIndex].dueDate !== formattedDate) {
+                    tasks[taskIndex].dueDate = formattedDate;
+                    tasks[taskIndex].lastModified = getCurrentTimestamp(); // Update timestamp
+                    saveTasks();
+                    renderDataTable(); // Update table
+                    // No need to re-render the card, input value is already updated
+                }
+            } else {
+                 console.error(`Task with ID ${taskId} not found for due date update.`);
+            }
+        }
+
+        /**
+         * Updates the subtask progress text displayed on a task card.
+         * @param {string} taskId - The ID of the task whose progress text needs updating.
+         */
+        function updateSubtaskProgress(taskId) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex === -1) return;
+
+            // Find the corresponding progress span in the DOM
+            const progressSpan = document.querySelector(`.subtask-progress[data-progress-for="${taskId}"]`);
+            if (progressSpan) {
+                const subtasks = tasks[taskIndex].subtasks;
+                progressSpan.textContent = calculateSubtaskProgress(subtasks); // Use helper function
+            }
+        }
+
+        /**
+         * Saves the current 'tasks' array to localStorage.
+         */
+        function saveTasks() {
+            try {
+                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+            } catch (e) {
+                console.error("Error saving tasks to localStorage:", e);
+                // Optionally, inform the user that saving failed
+                alert("Could not save tasks. Your browser's storage might be full or disabled.");
+            }
+        }
+
+        /**
+         * Loads tasks from localStorage or sets default tasks if none are found.
+         */
+        function loadTasks() {
+            let savedTasks = null;
+            try {
+                 savedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
+            } catch (e) {
+                 console.error("Error reading tasks from localStorage:", e);
+                 alert("Could not load tasks from storage. Starting with default tasks.");
+            }
+
+
+            if (savedTasks) {
+                try {
+                    tasks = JSON.parse(savedTasks);
+                    // Basic validation: ensure it's an array
+                    if (!Array.isArray(tasks)) {
+                        console.error("Loaded data is not an array. Resetting to default tasks.");
+                        tasks = getDefaultTasks();
+                    }
+                } catch (e) {
+                    console.error("Error parsing saved tasks:", e);
+                    alert("Could not parse saved tasks. Starting with default tasks.");
+                    tasks = getDefaultTasks(); // Load defaults if parsing fails
+                }
+            } else {
+                // Load default tasks for first-time users
+                tasks = getDefaultTasks();
+            }
+
+            renderBoardAndTable(); // Render the loaded or default tasks
+        }
+
+        /**
+         * Returns an array of default tasks for initial setup.
+         * @returns {Array} Array of default task objects.
+         */
+        function getDefaultTasks() {
+             const defaultTimestamp = getCurrentTimestamp();
+             const tomorrow = new Date();
+             tomorrow.setDate(tomorrow.getDate() + 1);
+             const tomorrowISO = tomorrow.toISOString().split('T')[0];
+
+             return [
+                {
+                    id: 'task-1',
+                    text: 'Welcome to Kanban Pro!',
+                    column: 'todo',
+                    priority: 'medium',
+                    dueDate: null,
+                    createdAt: defaultTimestamp,
+                    lastModified: defaultTimestamp,
+                    subtasks: [
+                        {id: 'sub-1', text: 'Add your first task using the form above', completed: false, lastModified: defaultTimestamp},
+                        {id: 'sub-2', text: 'Drag this task to "In Progress"', completed: false, lastModified: defaultTimestamp},
+                        {id: 'sub-3', text: 'Click the eye icon to view details', completed: false, lastModified: defaultTimestamp}
+                    ]
+                },
+                {
+                    id: 'task-2',
+                    text: 'Organize your workflow',
+                    column: 'inprogress',
+                    priority: 'high',
+                    dueDate: tomorrowISO, // Set due date for tomorrow
+                    createdAt: defaultTimestamp,
+                    lastModified: defaultTimestamp,
+                    subtasks: [
+                         {id: 'sub-4', text: 'Add subtasks to break down work', completed: true, lastModified: defaultTimestamp},
+                         {id: 'sub-5', text: 'Set due dates', completed: false, lastModified: defaultTimestamp}
+                    ]
+                },
+                {
+                    id: 'task-3',
+                    text: 'Review completed work',
+                    column: 'done',
+                    priority: 'low',
+                    dueDate: null,
+                    createdAt: defaultTimestamp,
+                    lastModified: defaultTimestamp,
+                    subtasks: []
+                }
+            ];
+        }
+
+
+        /**
+         * Triggers the confetti animation.
+         */
+        function triggerConfetti() {
+            myConfetti({
+                particleCount: 150,
+                spread: 90,
+                origin: { y: 0.6 }, // Start confetti slightly below the top
+                colors: ['#4f46e5', '#7c3aed', '#10b981', '#f59e0b', '#ef4444'] // Theme colors
+            });
+        }
+
+        /**
+         * Moves a task to a different column in the state and UI.
+         * @param {string} taskId - The ID of the task to move.
+         * @param {string} newColumnId - The ID of the destination column ('todo', 'inprogress', 'done').
+         */
+        function moveTaskToColumn(taskId, newColumnId) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex === -1) {
+                 console.error(`Task with ID ${taskId} not found for moving.`);
+                 return;
+            }
+
+            // Only update if the column actually changed
+            if (tasks[taskIndex].column !== newColumnId) {
+                tasks[taskIndex].column = newColumnId;
+                tasks[taskIndex].lastModified = getCurrentTimestamp(); // Update timestamp
+                saveTasks();
+
+                // Update the task element's class and move it in the DOM
+                const taskElement = document.querySelector(`.task[data-task-id="${taskId}"]`);
+                if (taskElement) {
+                    // Remove old column classes, add new one
+                    taskElement.classList.remove('todo', 'inprogress', 'done');
+                    taskElement.classList.add(newColumnId);
+                    // *** FIX: Explicitly remove dragging class after moving ***
+                    taskElement.classList.remove('dragging');
+
+                    // Move the element to the new list
+                    const targetList = document.querySelector(`#${newColumnId} .task-list`);
+                    if (targetList) {
+                        targetList.appendChild(taskElement); // Append (moves the element)
+                    } else {
+                         console.error(`Target list for column ${newColumnId} not found in DOM.`);
+                    }
+                } else {
+                     console.warn(`Task element for ID ${taskId} not found in DOM during move.`);
+                     // Re-render if element not found, though this shouldn't happen often
+                     renderTasks();
+                }
+
+                renderDataTable(); // Update the table status
+                updateStats(); // Update completed count if moved to 'done'
+
+                // Trigger confetti if moved to 'Done'
+                if (newColumnId === 'done') {
+                    triggerConfetti();
+                }
+            }
+        }
+
+        /**
+         * Exports the current tasks array as a JSON file.
+         */
+        function exportTasks() {
+            if (tasks.length === 0) {
+                alert("There are no tasks to export.");
+                return;
+            }
+            const dataStr = JSON.stringify(tasks, null, 2); // Pretty-print JSON
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+
+            const exportFileDefaultName = `kanban-tasks-${new Date().toISOString().split('T')[0]}.json`;
+
+            // Create a temporary link element to trigger the download
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click(); // Simulate click to download
+            linkElement.remove(); // Clean up the temporary link
+        }
+
+        /**
+         * Imports tasks from a selected JSON file, replacing current tasks.
+         * @param {File} file - The JSON file selected by the user.
+         */
+        function importTasks(file) {
+            if (!file) {
+                alert("Please select a file to import.");
+                return;
+            }
+            if (!file.name.toLowerCase().endsWith('.json')) {
+                 alert("Invalid file type. Please select a '.json' file.");
+                 return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importedTasks = JSON.parse(event.target.result);
+                    // Basic validation: Check if it's an array
+                    if (Array.isArray(importedTasks)) {
+                        // Optional: More thorough validation of task structure could be added here
+                        tasks = importedTasks; // Replace current tasks
+                        saveTasks(); // Save the imported tasks
+                        renderBoardAndTable(); // Re-render everything
+                        closeModal(); // Close the import modal
+                        alert(`Successfully imported ${importedTasks.length} tasks.`);
+                    } else {
+                        alert('Invalid file format. The JSON file should contain an array of tasks.');
+                    }
+                } catch (e) {
+                    console.error("Error parsing JSON file:", e);
+                    alert('Error parsing JSON file: ' + e.message);
+                }
+            };
+             reader.onerror = (e) => {
+                 console.error("Error reading file:", e);
+                 alert("Error reading the selected file.");
+             };
+            reader.readAsText(file); // Read the file content as text
+        }
+
+        /**
+         * Exports the data currently displayed in the analytics table as a CSV file.
+         */
+        function exportTableAsCSV() {
+             if (tasks.length === 0) {
+                alert("There is no data to export.");
+                return;
+            }
+
+            // Define CSV header row
+            let csv = 'Task Name,Priority,SubTask Name,Subtask Status,Task Status,Due Date,Last Modified\n';
+
+            // Iterate through tasks (use sorted order if desired, e.g., from renderDataTable)
+             const sortedTasks = [...tasks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            sortedTasks.forEach(task => {
+                const taskStatusName = getTaskStatusName(task.column);
+                const priorityLabel = getPriorityLabel(task.priority);
+                // Function to escape CSV special characters (double quotes)
+                const escapeCSV = (str) => `"${(str || '').replace(/"/g, '""')}"`;
+
+                if (task.subtasks && task.subtasks.length > 0) {
+                    // Add a row for each subtask
+                    task.subtasks.forEach((subtask, index) => {
+                        csv += index === 0 ? escapeCSV(task.text) : '""'; // Task name only on first row
+                        csv += ',';
+                        csv += index === 0 ? escapeCSV(priorityLabel) : '""'; // Priority only on first row
+                        csv += ',';
+                        csv += escapeCSV(subtask.text); // Subtask name
+                        csv += ',';
+                        csv += escapeCSV(subtask.completed ? 'Completed' : 'Not Completed'); // Subtask status
+                        csv += ',';
+                        csv += index === 0 ? escapeCSV(taskStatusName) : '""'; // Task status only on first row
+                        csv += ',';
+                        csv += index === 0 ? escapeCSV(task.dueDate ? formatDate(task.dueDate) : 'Not set') : '""'; // Due date only on first row
+                        csv += ',';
+                        csv += escapeCSV(formatTimestamp(subtask.lastModified || task.lastModified)); // Subtask/Task modified time
+                        csv += '\n';
+                    });
+                } else {
+                    // Add a single row for tasks without subtasks
+                    csv += escapeCSV(task.text);
+                    csv += ',';
+                    csv += escapeCSV(priorityLabel);
+                    csv += ',';
+                    csv += '"N/A"'; // No subtask name
+                    csv += ',';
+                    csv += '"N/A"'; // No subtask status
+                    csv += ',';
+                    csv += escapeCSV(taskStatusName);
+                    csv += ',';
+                    csv += escapeCSV(task.dueDate ? formatDate(task.dueDate) : 'Not set');
+                    csv += ',';
+                    csv += escapeCSV(formatTimestamp(task.lastModified));
+                    csv += '\n';
+                }
+            });
+
+            // Create a Blob and trigger download
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `kanban-tasks-analytics-${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url); // Clean up blob URL
+        }
+
+        /**
+         * Clears all tasks after confirmation.
+         */
+        function clearAllTasks() {
+            if (!confirm('⚠️ Are you sure you want to delete ALL tasks? This action cannot be undone.')) {
+                return;
+            }
+            tasks = []; // Empty the tasks array
+            saveTasks(); // Persist the empty array
+            renderBoardAndTable(); // Re-render the empty board and table
+            alert("All tasks have been cleared.");
+        }
+
+
+        // --- Event Listener Setup Functions ---
+        // Functions to attach event listeners to DOM elements
+
+        /**
+         * Adds dragstart and dragend listeners to a single task element.
+         * @param {HTMLElement} taskElement - The task card element.
+         */
+        function addDragListenersToTask(taskElement) {
+            taskElement.addEventListener('dragstart', (e) => {
+                // Prevent dragging if interacting with buttons, inputs, or editable text
+                if (e.target.closest('button, input, [contenteditable="true"], .subtask-item, .add-subtask-form')) {
+                    e.preventDefault();
+                    return;
+                }
+
+                draggedTask = taskElement; // Store the element being dragged
+                // Add styling class slightly after drag starts for smoother visual feedback
+                setTimeout(() => taskElement.classList.add('dragging'), 0);
+                // Set data for the drag operation (optional, but good practice)
+                e.dataTransfer.setData('text/plain', taskElement.dataset.taskId);
+                e.dataTransfer.effectAllowed = 'move'; // Indicate the type of operation
+            });
+
+            taskElement.addEventListener('dragend', () => {
+                // Clean up after drag ends
+                if (draggedTask) draggedTask.classList.remove('dragging'); // Ensure class is removed on drag end regardless of drop success
+                draggedTask = null;
+                // Remove visual feedback from columns
+                columns.forEach(col => col.classList.remove('drag-over'));
+            });
+        }
+
+        /**
+         * Adds drag listeners to all task elements currently on the board.
+         */
+        function addDragListenersToTasks() {
+            document.querySelectorAll('.task').forEach(addDragListenersToTask);
+        }
+
+        /**
+         * Adds focus, blur, and keydown listeners for inline editing of task text.
+         * @param {HTMLElement} taskElement - The task card element.
+         */
+        function addEditListenerToTask(taskElement) {
+            const textSpan = taskElement.querySelector('.task-text[contenteditable="true"]');
+            if (!textSpan) return; // Exit if editable span not found
+
+            const taskId = textSpan.dataset.taskId;
+            let originalText = ''; // Store original text on focus
+
+            textSpan.addEventListener('focus', (e) => {
+                originalText = e.target.textContent.trim();
+                // Optional: Select all text on focus
+                // window.getSelection().selectAllChildren(e.target);
+            });
+
+            textSpan.addEventListener('blur', (e) => {
+                const newText = e.target.textContent.trim();
+                if (newText === '') {
+                     // Prevent saving empty task text, revert or prompt
+                     alert("Task text cannot be empty.");
+                     e.target.textContent = originalText; // Revert
+                } else if (newText !== originalText) {
+                    updateTaskText(taskId, newText); // Save if changed and not empty
+                }
+            });
+
+            // Handle Enter and Escape keys during editing
+            textSpan.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // Prevent newline
+                    e.target.blur(); // Trigger blur to save
+                } else if (e.key === 'Escape') {
+                    e.target.textContent = originalText; // Revert text
+                    e.target.blur(); // Trigger blur
+                }
+            });
+
+            // Prevent task drag when clicking/touching the editable text area
+            textSpan.addEventListener('mousedown', e => e.stopPropagation());
+            textSpan.addEventListener('touchstart', e => e.stopPropagation());
+        }
+
+        /**
+         * Adds edit listeners to all task elements currently on the board.
+         */
+        function addEditListenersToTasks() {
+            document.querySelectorAll('.task').forEach(addEditListenerToTask);
+        }
+
+        /**
+         * Adds change listener to checkbox and click listener to delete button for a subtask item.
+         * @param {HTMLElement} subtaskElement - The subtask list item (li) element.
+         */
+        function addSubtaskItemListeners(subtaskElement) {
+            const checkbox = subtaskElement.querySelector('.subtask-checkbox');
+            const deleteButton = subtaskElement.querySelector('.delete-subtask-btn');
+            const parentTaskId = subtaskElement.dataset.parentTaskId;
+            const subtaskId = subtaskElement.dataset.subtaskId;
+
+            if (checkbox) {
+                checkbox.addEventListener('change', (e) => {
+                    toggleSubtaskCompletion(parentTaskId, subtaskId, e.target.checked);
+                });
+                // Prevent drag when interacting with checkbox
+                checkbox.addEventListener('mousedown', e => e.stopPropagation());
+                checkbox.addEventListener('touchstart', e => e.stopPropagation());
+            }
+
+            // Delete button listener is now added directly in createSubtaskElement
+
+            // Prevent drag when interacting with the delete button
+             if (deleteButton) {
+                deleteButton.addEventListener('mousedown', e => e.stopPropagation());
+                deleteButton.addEventListener('touchstart', e => e.stopPropagation());
+            }
+        }
+
+
+        /**
+         * Adds listeners for adding subtasks (button click, input enter) within a task card.
+         * @param {HTMLElement} taskElement - The task card element.
+         */
+        function addSubtaskListenersToTask(taskElement) {
+            const addSubtaskBtn = taskElement.querySelector('.add-subtask-btn');
+            const subtaskInput = taskElement.querySelector('.add-subtask-input');
+            const parentTaskId = taskElement.dataset.taskId;
+
+            if (addSubtaskBtn && subtaskInput) {
+                // Common function to handle adding the subtask
+                const handleAdd = (e) => {
+                    e.stopPropagation(); // Prevent task drag
+                    const subtaskText = subtaskInput.value.trim();
+                    if (subtaskText) {
+                        addSubtask(parentTaskId, subtaskText);
+                        subtaskInput.value = ''; // Clear input after adding
+                    }
+                };
+
+                // Add listener for button click
+                addSubtaskBtn.addEventListener('click', handleAdd);
+                // Add listener for Enter key in input field
+                subtaskInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault(); // Prevent default form submission/newline
+                        handleAdd(e);
+                    }
+                });
+                 // Prevent drag when interacting with input/button
+                 subtaskInput.addEventListener('mousedown', e => e.stopPropagation());
+                 subtaskInput.addEventListener('touchstart', e => e.stopPropagation());
+                 addSubtaskBtn.addEventListener('mousedown', e => e.stopPropagation());
+                 addSubtaskBtn.addEventListener('touchstart', e => e.stopPropagation());
+            }
+
+            // Add listeners to existing subtask items within this task
+             taskElement.querySelectorAll('.subtask-item').forEach(addSubtaskItemListeners);
+        }
+
+        /**
+         * Adds subtask-related listeners to all task elements on the board.
+         */
+        function addSubtaskListeners() {
+            document.querySelectorAll('.task').forEach(addSubtaskListenersToTask);
+        }
+
+        /**
+         * Adds change listener to the due date input within a task card.
+         * @param {HTMLElement} taskElement - The task card element.
+         */
+        function addDueDateListenerToTask(taskElement) {
+            const dueDateInput = taskElement.querySelector('.due-date-input');
+            const taskId = taskElement.dataset.taskId;
+
+            if (dueDateInput) {
+                dueDateInput.addEventListener('change', (e) => {
+                    updateDueDate(taskId, e.target.value);
+                });
+                 // Prevent drag when interacting with date input
+                 dueDateInput.addEventListener('mousedown', e => e.stopPropagation());
+                 dueDateInput.addEventListener('touchstart', e => e.stopPropagation());
+            }
+        }
+
+        /**
+         * Adds due date listeners to all task elements on the board.
+         */
+        function addDueDateListeners() {
+            document.querySelectorAll('.task').forEach(addDueDateListenerToTask);
+        }
+
+         /**
+         * Adds click listener to the "View Details" button within a task card.
+         * @param {HTMLElement} taskElement - The task card element.
+         */
+        function addTaskActionListenersToTask(taskElement) {
+             const viewDetailsBtn = taskElement.querySelector('.task-action-btn'); // Assuming only one action btn for now
+             const taskId = taskElement.dataset.taskId;
+
+             if (viewDetailsBtn) {
+                 viewDetailsBtn.addEventListener('click', (e) => {
+                     e.stopPropagation(); // Prevent drag
+                     showTaskDetail(taskId);
+                 });
+                  // Prevent drag when interacting
+                 viewDetailsBtn.addEventListener('mousedown', e => e.stopPropagation());
+                 viewDetailsBtn.addEventListener('touchstart', e => e.stopPropagation());
+             }
+        }
+
+        /**
+         * Adds action listeners (like View Details) to all task elements on the board.
+         */
+        function addTaskActionListeners() {
+             document.querySelectorAll('.task').forEach(addTaskActionListenersToTask);
+        }
+
+
+        // --- Global Event Listeners ---
+        // Listeners attached to the document or static elements
+
+        // Add Task Button Listener
+        addTaskBtn.addEventListener('click', addTask);
+
+        // Add Task on Enter key in input field
+        newTaskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addTask();
+            }
+        });
+
+        // Search Input Listener
+        searchInput.addEventListener('input', (e) => {
+            currentSearchQuery = e.target.value;
+            renderTasks(); // Re-render tasks based on the new search query
+        });
+
+        // Drag and Drop Listeners for Columns
+        columns.forEach(column => {
+            column.addEventListener('dragover', (e) => {
+                e.preventDefault(); // Allow dropping
+                // Provide visual feedback when dragging over a column
+                if (draggedTask && draggedTask.closest('.kanban-column') !== column) {
+                    column.classList.add('drag-over');
+                }
+                e.dataTransfer.dropEffect = 'move';
+            });
+
+            column.addEventListener('dragenter', (e) => {
+                 e.preventDefault();
+                 if (draggedTask && draggedTask.closest('.kanban-column') !== column) {
+                    column.classList.add('drag-over');
+                }
+            });
+
+
+            column.addEventListener('dragleave', (e) => {
+                // Remove visual feedback if not dragging over a child element
+                 if (!column.contains(e.relatedTarget)) {
+                    column.classList.remove('drag-over');
+                }
+            });
+
+            column.addEventListener('drop', (e) => {
+                e.preventDefault();
+                column.classList.remove('drag-over'); // Remove visual feedback
+                if (!draggedTask) return; // Ensure a task was being dragged
+
+                const taskId = draggedTask.dataset.taskId;
+                const newColumnId = column.id; // ID of the column where dropped
+
+                // Move the task if it's dropped in a different column
+                if (taskId && newColumnId && draggedTask.closest('.kanban-column') !== column) {
+                    moveTaskToColumn(taskId, newColumnId);
+                }
+                // Reset draggedTask *after* potential move operation
+                draggedTask = null;
+            });
+        });
+
+         // Modal Close Listeners
+         closeModalBtn.addEventListener('click', closeModal);
+         closeModalElements.forEach(el => el.addEventListener('click', closeModal));
+         // Close modal if clicking outside the modal content
+         taskDetailModal.addEventListener('click', (e) => {
+             if (e.target === taskDetailModal) { // Check if click is on the backdrop
+                 closeModal();
+             }
+         });
+         importModal.addEventListener('click', (e) => {
+             if (e.target === importModal) { // Check if click is on the backdrop
+                 closeModal();
+             }
+         });
+         // Close modal on Escape key press
+         document.addEventListener('keydown', (e) => {
+             if (e.key === 'Escape') {
+                 closeModal();
+             }
+         });
+
+         // Import/Export Button Listeners
+         exportBtn.addEventListener('click', exportTasks);
+         importBtn.addEventListener('click', () => {
+             importModal.style.display = 'block'; // Show import modal
+             document.body.style.overflow = 'hidden';
+         });
+
+         // Import Modal Button Listeners
+         cancelImportBtn.addEventListener('click', closeModal);
+         confirmImportBtn.addEventListener('click', () => {
+             const file = importFileInput.files[0];
+             importTasks(file);
+         });
+
+         // Table Action Listeners
+         clearAllBtn.addEventListener('click', (e) => {
+             e.preventDefault(); // Prevent default link behavior
+             clearAllTasks();
+             // Optionally close the dropdown if needed
+             // e.target.closest('.dropdown-content').style.display = 'none';
+         });
+         exportTableBtn.addEventListener('click', (e) => {
+             e.preventDefault();
+             exportTableAsCSV();
+              // Optionally close the dropdown
+             // e.target.closest('.dropdown-content').style.display = 'none';
+         });
+
+         // Empty Table State Button Listener
+         addFirstTaskBtn.addEventListener('click', () => {
+             newTaskInput.focus(); // Focus the main task input field
+         });
+
+
+        // --- Initialization ---
+        // Load tasks when the page loads
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+    </script>
+</body>
+</html>
