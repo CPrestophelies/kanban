@@ -1,4 +1,4 @@
-# kanban
+# KanBan Board Pro
 Basic KanBan board used to track tasks. 
 
 
